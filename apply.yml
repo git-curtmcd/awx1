@@ -1,0 +1,23 @@
+---
+- name: Run Terraform to provision infrastructure
+  hosts: localhost
+  gather_facts: false
+  vars:
+    tf_dir: "/path/to/terraform/files"
+
+  tasks:
+    - name: Terraform init
+      community.general.terraform:
+        project_path: "{{ tf_dir }}"
+        state: present
+        force_init: true
+
+    - name: Terraform apply
+      community.general.terraform:
+        project_path: "{{ tf_dir }}"
+        state: present
+      register: tf_output
+
+    - name: Store VM IPs
+      ansible.builtin.set_fact:
+        vm_ips: "{{ tf_output.outputs.vm_ip.value }}"
