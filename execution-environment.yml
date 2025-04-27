@@ -1,0 +1,12 @@
+# Location: awx1/execution-environment.yml
+version: 1
+
+build_arg_defaults:
+  EE_BASE_IMAGE: quay.io/ansible/ansible-runner:latest
+
+dependencies:
+  galaxy: requirements.yml  # Path to collections/requirements.yml
+
+additional_build_steps:
+  prepend: |
+    RUN pip install proxmoxer requests  # Install Python dependencies
