@@ -1,13 +1,14 @@
 ---
-- name: Create and Configure Proxmox VM
+# Play 1: Proxmox VM Creation
+- name: Create and Start Proxmox VM
   hosts: build
+  gather_facts: false
   collections:
-    - community.general  # Required for proxmox_kvm module
+    - community.general
   vars:
     proxmox_node: proxmox
     proxmox_api_host: 10.0.0.200
     proxmox_api_port: 8006
-
   tasks:
     - name: Clone VM template
       community.general.proxmox_kvm:
@@ -16,7 +17,7 @@
         api_password: "{{ proxmox_pass }}"
         api_host: "{{ proxmox_api_host }}"
         api_port: "{{ proxmox_api_port }}"
-        validate_certs: no  # Add if using self-signed certs
+        validate_certs: no
         storage: local
         clone: test-vm-1
         name: "{{ vm_name }}"
@@ -42,12 +43,13 @@
       ansible.builtin.pause:
         seconds: 20
 
+# Play 2: Configure the new VM
 - name: Configure new VM
-  hosts: "{{ vm_name }}"  # Dynamic host targeting
+  hosts: new_vm  # This should match a host in your AWX inventory!
   become: yes
+  gather_facts: false
   vars:
-    network_interface: ens18  # Verify interface name
-
+    network_interface: ens18  # Change if your VM uses a different interface
   tasks:
     - name: Configure static IP
       ansible.builtin.lineinfile:
