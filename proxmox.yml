@@ -1,22 +1,43 @@
 ---
-# Play 1: Proxmox VM Creation
+# Play 1: Proxmox VM Creation with Debugging
 - name: Create and Start Proxmox VM
-  hosts: build  # REQUIRES VALID INVENTORY GROUP
+  hosts: build
   collections:
-    - community.general  # MUST BE INSTALLED IN EXECUTION ENVIRONMENT
+    - community.general
   vars:
     proxmox_node: proxmox
     proxmox_api_host: 10.0.0.200
     proxmox_api_port: 8006
-    validate_certs: no  # For self-signed certificates
+    validate_certs: no
 
   tasks:
+    # Debugging: Show input variables
+    - name: Display VM creation parameters
+      ansible.builtin.debug:
+        msg: |
+          VM Name: {{ vm_name }}
+          Proxmox Host: {{ proxmox_api_host }}:{{ proxmox_api_port }}
+          Clone Template: test-vm-1
+
+    # Debugging: Verify API connection
+    - name: Test Proxmox API connection
+      ansible.builtin.uri:
+        url: "https://{{ proxmox_api_host }}:{{ proxmox_api_port }}/api2/json"
+        validate_certs: no
+        status_code: 200
+      register: api_test
+      ignore_errors: yes
+
+    - name: Show API connection result
+      ansible.builtin.debug:
+        var: api_test
+
+    # Main VM creation task
     - name: Clone VM template
       community.general.proxmox_kvm:
-        validate_certs: no
         node: "{{ proxmox_node }}"
         api_user: "root@pam"
-        api_password: "{{ proxmox_pass }}"  # FROM AWX CREDENTIALS
+        api_password: "{{ proxmox_pass }}"
         api_host: "{{ proxmox_api_host }}"
         api_port: "{{ proxmox_api_port }}"
         validate_certs: "{{ validate_certs }}"
@@ -25,6 +46,13 @@
         name: "{{ vm_name }}"
         full: true
       register: vm_creation
+      retries: 3
+      delay: 10
+      until: vm_creation is succeeded
+
+    - name: Display VM creation results
+      ansible.builtin.debug:
+        var: vm_creation
 
     - name: Wait for clone completion
       ansible.builtin.pause:
@@ -40,19 +68,6 @@
         api_port: "{{ proxmox_api_port }}"
         name: "{{ vm_name }}"
         state: started
+      register: vm_start
 
-# Play 2: Configure new VM
-- name: Configure VM Network
-  hosts: new_vm  # DYNAMIC INVENTORY REQUIRED
-  become: yes
-  tasks:
-    - name: Set static IP
-      ansible.builtin.lineinfile:
-        path: "/etc/sysconfig/network-scripts/ifcfg-ens18"
-        regexp: "^IPADDR="
-        line: "IPADDR={{ new_IP }}"
-        backup: yes
-
-    - name: Reboot VM
-      ansible.builtin.reboot:
-        reboot_timeout: 600
+    - name: Display VM start resu
