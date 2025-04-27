@@ -1,73 +1,69 @@
 ---
-# Play 1: Proxmox VM Creation with Debugging
-- name: Create and Start Proxmox VM
+- name: Create and Manage Proxmox VM
   hosts: build
   collections:
     - community.general
   vars:
-    proxmox_node: proxmox
     proxmox_api_host: 10.0.0.200
     proxmox_api_port: 8006
+    proxmox_node: proxmox
     validate_certs: no
-
+    vm_name: "test-vm-01"
+    template_id: 9000  # Verify your template VMID
+    storage_pool: local
+    
   tasks:
-    # Debugging: Show input variables
-    - name: Display VM creation parameters
-      ansible.builtin.debug:
-        msg: |
-          VM Name: {{ vm_name }}
-          Proxmox Host: {{ proxmox_api_host }}:{{ proxmox_api_port }}
-          Clone Template: test-vm-1
-
-    # Debugging: Verify API connection
-    - name: Test Proxmox API connection
+    - name: Validate Proxmox API connection
       ansible.builtin.uri:
         url: "https://{{ proxmox_api_host }}:{{ proxmox_api_port }}/api2/json"
-        validate_certs: no
+        user: "{{ proxmox_api_user }}"
+        password: "{{ proxmox_api_password }}"
+        validate_certs: "{{ validate_certs }}"
         status_code: 200
-      register: api_test
+      register: api_check
       ignore_errors: yes
+      changed_when: false
 
-    - name: Show API connection result
-      ansible.builtin.debug:
-        var: api_test
+    - name: Fail if API unreachable
+      ansible.builtin.fail:
+        msg: "Could not connect to Proxmox API at {{ proxmox_api_host }}:{{ proxmox_api_port }}"
+      when: api_check is failed
 
-    # Main VM creation task
     - name: Clone VM template
       community.general.proxmox_kvm:
-        node: "{{ proxmox_node }}"
-        api_user: "root@pam"
-        api_password: "{{ proxmox_pass }}"
         api_host: "{{ proxmox_api_host }}"
         api_port: "{{ proxmox_api_port }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password }}"
         validate_certs: "{{ validate_certs }}"
-        storage: local
-        clone: test-vm-1
+        node: "{{ proxmox_node }}"
+        clone: "{{ template_id }}"
         name: "{{ vm_name }}"
-        full: true
+        storage: "{{ storage_pool }}"
+        full: yes
       register: vm_creation
       retries: 3
       delay: 10
       until: vm_creation is succeeded
 
-    - name: Display VM creation results
+    - name: Show cloning results
       ansible.builtin.debug:
         var: vm_creation
 
-    - name: Wait for clone completion
+    - name: Wait for VM provisioning
       ansible.builtin.pause:
-        seconds: 10
+        seconds: 15
       when: vm_creation.changed
 
-    - name: Start cloned VM
+    - name: Verify VM status
       community.general.proxmox_kvm:
-        node: "{{ proxmox_node }}"
-        api_user: "root@pam"
-        api_password: "{{ proxmox_pass }}"
         api_host: "{{ proxmox_api_host }}"
-        api_port: "{{ proxmox_api_port }}"
+        api_user: "{{ proxmox_api_user }}"
+        api_password: "{{ proxmox_api_password }}"
+        node: "{{ proxmox_node }}"
         name: "{{ vm_name }}"
-        state: started
-      register: vm_start
+      register: vm_status
 
-    - name: Display VM start resu
+    - name: Display final VM status
+      ansible.builtin.debug:
+        var: vm_status
