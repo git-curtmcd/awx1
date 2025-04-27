@@ -1,23 +1,24 @@
 ---
 # Play 1: Proxmox VM Creation
 - name: Create and Start Proxmox VM
-  hosts: build
-  gather_facts: false
+  hosts: build  # REQUIRES VALID INVENTORY GROUP
   collections:
-    - community.general
+    - community.general  # MUST BE INSTALLED IN EXECUTION ENVIRONMENT
   vars:
     proxmox_node: proxmox
     proxmox_api_host: 10.0.0.200
     proxmox_api_port: 8006
+    validate_certs: no  # For self-signed certificates
+
   tasks:
     - name: Clone VM template
       community.general.proxmox_kvm:
         node: "{{ proxmox_node }}"
         api_user: "root@pam"
-        api_password: "{{ proxmox_pass }}"
+        api_password: "{{ proxmox_pass }}"  # FROM AWX CREDENTIALS
         api_host: "{{ proxmox_api_host }}"
         api_port: "{{ proxmox_api_port }}"
-        validate_certs: no
+        validate_certs: "{{ validate_certs }}"
         storage: local
         clone: test-vm-1
         name: "{{ vm_name }}"
@@ -39,34 +40,18 @@
         name: "{{ vm_name }}"
         state: started
 
-    - name: Wait for VM initialization
-      ansible.builtin.pause:
-        seconds: 20
-
-# Play 2: Configure the new VM
-- name: Configure new VM
-  hosts: new_vm  # This should match a host in your AWX inventory!
+# Play 2: Configure new VM
+- name: Configure VM Network
+  hosts: new_vm  # DYNAMIC INVENTORY REQUIRED
   become: yes
-  gather_facts: false
-  vars:
-    network_interface: ens18  # Change if your VM uses a different interface
   tasks:
-    - name: Configure static IP
+    - name: Set static IP
       ansible.builtin.lineinfile:
-        path: "/etc/sysconfig/network-scripts/ifcfg-{{ network_interface }}"
+        path: "/etc/sysconfig/network-scripts/ifcfg-ens18"
         regexp: "^IPADDR="
         line: "IPADDR={{ new_IP }}"
         backup: yes
 
-    - name: Set hostname
-      ansible.builtin.hostname:
-        name: "{{ hostname }}.securedevguy.local"
-
     - name: Reboot VM
       ansible.builtin.reboot:
         reboot_timeout: 600
-
-    - name: Wait for system to come back
-      ansible.builtin.wait_for_connection:
-        delay: 30
-        timeout: 300
