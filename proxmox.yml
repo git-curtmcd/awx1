@@ -1,75 +1,70 @@
 ---
-- name: Create VM from Proxmox Template
+- name: Create and Configure Proxmox VM
   hosts: build
+  collections:
+    - community.general  # Required for proxmox_kvm module
+  vars:
+    proxmox_node: proxmox
+    proxmox_api_host: 10.0.0.200
+    proxmox_api_port: 8006
+
   tasks:
-    - name: Install python3-pip
-      ansible.builtin.yum:
-        name: python3-pip
-        state: present
-      become: yes
-
-    - name: Install setuptools module via pip
-      ansible.builtin.pip:
-        name: setuptools
-        state: present
-
-    - name: Install requests module via pip
-      ansible.builtin.pip:
-        name: requests
-        state: present
-
-    - name: Install proxmoxer module via pip
-      ansible.builtin.pip:
-        name: proxmoxer
-        state: present
-
-    - name: Clone proxmox template
+    - name: Clone VM template
       community.general.proxmox_kvm:
-        node: proxmox
+        node: "{{ proxmox_node }}"
         api_user: "root@pam"
         api_password: "{{ proxmox_pass }}"
-        api_host: "10.0.0.200"
-        api_port: 8006
-        storage: "local"
-        full: true
-        clone: "test-vm-1"
+        api_host: "{{ proxmox_api_host }}"
+        api_port: "{{ proxmox_api_port }}"
+        validate_certs: no  # Add if using self-signed certs
+        storage: local
+        clone: test-vm-1
         name: "{{ vm_name }}"
+        full: true
+      register: vm_creation
 
-    - name: wait 10 seconds
+    - name: Wait for clone completion
       ansible.builtin.pause:
         seconds: 10
+      when: vm_creation.changed
 
-    - name: Start VM
+    - name: Start cloned VM
       community.general.proxmox_kvm:
-        node: proxmox
+        node: "{{ proxmox_node }}"
         api_user: "root@pam"
         api_password: "{{ proxmox_pass }}"
-        api_host: "10.0.0.200"
-        api_port: 8006
+        api_host: "{{ proxmox_api_host }}"
+        api_port: "{{ proxmox_api_port }}"
         name: "{{ vm_name }}"
         state: started
 
-    - name: wait 20 seconds
+    - name: Wait for VM initialization
       ansible.builtin.pause:
         seconds: 20
 
-- name: Set VM IP and Hostname
-  hosts: 10.0.0.66
-  tasks:
-    - name: Update IP
-      ansible.builtin.lineinfile:
-        path: /etc/sysconfig/network-scripts/ifcfg-ens18
-        regex: "IPADDR=10.0.0.66"
-        line: "IPADDR={{ new_IP }}"
+- name: Configure new VM
+  hosts: "{{ vm_name }}"  # Dynamic host targeting
+  become: yes
+  vars:
+    network_interface: ens18  # Verify interface name
 
-    - name: Update Hostname
+  tasks:
+    - name: Configure static IP
+      ansible.builtin.lineinfile:
+        path: "/etc/sysconfig/network-scripts/ifcfg-{{ network_interface }}"
+        regexp: "^IPADDR="
+        line: "IPADDR={{ new_IP }}"
+        backup: yes
+
+    - name: Set hostname
       ansible.builtin.hostname:
         name: "{{ hostname }}.securedevguy.local"
 
-    - name: Reboot
-      ansible.builtin.command: "init 6"
-      ignore_errors: true
+    - name: Reboot VM
+      ansible.builtin.reboot:
+        reboot_timeout: 600
 
-    - name: Pause for 30 seconds to wait for reboot
-      ansible.builtin.pause:
-        seconds: "10"
+    - name: Wait for system to come back
+      ansible.builtin.wait_for_connection:
+        delay: 30
+        timeout: 300
