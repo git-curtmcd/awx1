@@ -1,4 +1,12 @@
 ---
+- name: Install required collections
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Install Ansible collections from requirements.yml
+      ansible.builtin.command:
+        cmd: ansible-galaxy collection install -r /home/test/requirements.yml
+
 - name: Create and Manage Proxmox VM
   hosts: build
   collections:
@@ -11,7 +19,7 @@
     vm_name: "test-vm-01"
     template_id: 9000  # Verify your template VMID
     storage_pool: local
-    
+
   tasks:
     - name: Validate Proxmox API connection
       ansible.builtin.uri:
