@@ -13,6 +13,7 @@
   tasks:
     - name: Clone VM template
       community.general.proxmox_kvm:
+        validate_certs: no
         node: "{{ proxmox_node }}"
         api_user: "root@pam"
         api_password: "{{ proxmox_pass }}"  # FROM AWX CREDENTIALS
